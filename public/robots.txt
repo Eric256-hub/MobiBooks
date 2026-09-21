@@ -1,0 +1,4 @@
+User-agent: *
+Allow: /
+
+Sitemap: https://mobibooks-seven.vercel.app/sitemap.xml
