@@ -23,7 +23,7 @@ import Inventory from '@/pages/Inventory';
 import Transactions from '@/pages/Transactions';
 import Reports from '@/pages/Reports';
 
-type Page =
+export type Page =
   | 'dashboard'
   | 'products'
   | 'sales'
@@ -31,6 +31,11 @@ type Page =
   | 'inventory'
   | 'transactions'
   | 'reports';
+
+export type DashboardPeriod =
+  | 'today'
+  | 'week'
+  | 'month';
 
 const navItems: {
   id: Page;
@@ -76,10 +81,18 @@ const navItems: {
 
 function App() {
   const [page, setPage] = useState<Page>('dashboard');
-  const [mobileNavOpen, setMobileNavOpen] = useState(false);
+
+  const [dashboardPeriod, setDashboardPeriod] =
+    useState<DashboardPeriod>('today');
+
+  const [mobileNavOpen, setMobileNavOpen] =
+    useState(false);
 
   const [user, setUser] = useState<User | null>(null);
   const [authLoading, setAuthLoading] = useState(true);
+
+  const [showLoginSplash, setShowLoginSplash] =
+    useState(false);
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
@@ -89,10 +102,24 @@ function App() {
 
     const {
       data: { subscription },
-    } = supabase.auth.onAuthStateChange((_event, session) => {
-      setUser(session?.user ?? null);
-      setAuthLoading(false);
-    });
+    } = supabase.auth.onAuthStateChange(
+      (event, session) => {
+        setUser(session?.user ?? null);
+        setAuthLoading(false);
+
+        if (event === 'SIGNED_IN' && session?.user) {
+          setShowLoginSplash(true);
+
+          setTimeout(() => {
+            setShowLoginSplash(false);
+          }, 1500);
+        }
+
+        if (event === 'SIGNED_OUT') {
+          setShowLoginSplash(false);
+        }
+      }
+    );
 
     return () => {
       subscription.unsubscribe();
@@ -106,20 +133,63 @@ function App() {
   async function handleLogout() {
     await supabase.auth.signOut();
     setPage('dashboard');
+    setDashboardPeriod('today');
   }
 
   if (authLoading) {
     return (
-      <div className="min-h-screen bg-slate-50 flex items-center justify-center">
+      <div className="min-h-screen bg-white flex items-center justify-center">
         <div className="text-center">
           <img
             src="/mobibooks-logo.png"
             alt="MobiBooks Logo"
-            className="mx-auto w-20 h-20 object-contain"
+            className="mx-auto w-28 h-28 object-contain"
           />
 
-          <p className="mt-4 text-slate-600">
-            Loading MobiBooks...
+          <h1 className="mt-5 text-4xl font-bold text-slate-800">
+            MobiBooks
+          </h1>
+
+          <p className="mt-2 text-sm text-slate-500">
+            Digital Bookkeeping & Financial Records
+          </p>
+
+          <div className="mt-6 flex justify-center">
+            <div className="w-6 h-6 border-2 border-emerald-600 border-t-transparent rounded-full animate-spin" />
+          </div>
+
+          <p className="mt-3 text-xs text-slate-400">
+            Loading...
+          </p>
+        </div>
+      </div>
+    );
+  }
+
+  if (showLoginSplash && user) {
+    return (
+      <div className="min-h-screen bg-white flex items-center justify-center">
+        <div className="text-center">
+          <img
+            src="/mobibooks-logo.png"
+            alt="MobiBooks Logo"
+            className="mx-auto w-28 h-28 object-contain"
+          />
+
+          <h1 className="mt-5 text-4xl font-bold text-slate-800">
+            MobiBooks
+          </h1>
+
+          <p className="mt-2 text-sm text-slate-500">
+            Digital Bookkeeping & Financial Records
+          </p>
+
+          <div className="mt-6 flex justify-center">
+            <div className="w-6 h-6 border-2 border-emerald-600 border-t-transparent rounded-full animate-spin" />
+          </div>
+
+          <p className="mt-3 text-xs text-slate-400">
+            Preparing your dashboard...
           </p>
         </div>
       </div>
@@ -130,16 +200,38 @@ function App() {
     return <Login onLogin={() => {}} />;
   }
 
+  const navigateFromDashboard = (
+    targetPage: Page,
+    period?: DashboardPeriod
+  ) => {
+    if (period) {
+      setDashboardPeriod(period);
+    }
+
+    setPage(targetPage);
+  };
+
   const renderPage = () => {
     switch (page) {
       case 'dashboard':
-        return <Dashboard onNavigate={setPage} />;
+        return (
+          <Dashboard
+            onNavigate={navigateFromDashboard}
+            selectedPeriod={dashboardPeriod}
+            onPeriodChange={setDashboardPeriod}
+          />
+        );
 
       case 'products':
         return <Products />;
 
       case 'sales':
-        return <Sales />;
+        return (
+          <Sales
+            period={dashboardPeriod}
+            onPeriodChange={setDashboardPeriod}
+          />
+        );
 
       case 'expenses':
         return <Expenses />;
@@ -154,7 +246,13 @@ function App() {
         return <Reports />;
 
       default:
-        return <Dashboard onNavigate={setPage} />;
+        return (
+          <Dashboard
+            onNavigate={navigateFromDashboard}
+            selectedPeriod={dashboardPeriod}
+            onPeriodChange={setDashboardPeriod}
+          />
+        );
     }
   };
 
@@ -182,7 +280,9 @@ function App() {
         </div>
 
         <button
-          onClick={() => setMobileNavOpen(!mobileNavOpen)}
+          onClick={() =>
+            setMobileNavOpen(!mobileNavOpen)
+          }
           className="p-2 rounded-lg text-slate-600 hover:bg-slate-100"
           aria-label="Toggle navigation"
         >
@@ -200,8 +300,6 @@ function App() {
           mobileNavOpen ? 'block' : 'hidden'
         } lg:block w-full lg:w-64 bg-white border-r border-slate-200 lg:min-h-screen flex-shrink-0`}
       >
-
-        {/* DESKTOP BRAND */}
         <div className="hidden lg:flex items-center gap-3 px-6 py-6 border-b border-slate-200">
           <img
             src="/mobibooks-logo.png"
@@ -220,7 +318,6 @@ function App() {
           </div>
         </div>
 
-        {/* NAVIGATION */}
         <nav className="p-3 lg:p-4 space-y-1">
           {navItems.map((item) => {
             const Icon = item.icon;
@@ -230,9 +327,9 @@ function App() {
               <button
                 key={item.id}
                 onClick={() => setPage(item.id)}
-                className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-base font-medium transition-colors ${
+                className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-base font-medium transition-all ${
                   active
-                    ? 'bg-emerald-600 text-white'
+                    ? 'bg-emerald-600 text-white shadow-sm'
                     : 'text-slate-600 hover:bg-slate-100'
                 }`}
               >
@@ -243,7 +340,6 @@ function App() {
           })}
         </nav>
 
-        {/* USER ACCOUNT */}
         <div className="px-4 py-4 mt-4 border-t border-slate-200">
           <p className="text-xs text-slate-500 mb-3 truncate">
             {user.email}
@@ -258,7 +354,6 @@ function App() {
           </button>
         </div>
 
-        {/* SIDEBAR FOOTER */}
         <div className="px-4 py-4 border-t border-slate-200 hidden lg:block">
           <p className="text-xs text-slate-400 leading-relaxed">
             Digital bookkeeping and financial records management.
@@ -272,7 +367,7 @@ function App() {
 
       {/* MAIN CONTENT */}
       <main className="flex-1 overflow-x-hidden">
-        <div className="max-w-6xl mx-auto px-4 sm:px-6 py-6 lg:py-8">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 py-6 lg:py-8">
           {renderPage()}
         </div>
       </main>

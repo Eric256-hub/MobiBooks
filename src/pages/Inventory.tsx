@@ -31,6 +31,22 @@ const CATEGORIES = [
   'Other',
 ];
 
+const UNITS = [
+  'Piece',
+  'Kg',
+  'Gram',
+  'Litre',
+  'Bottle',
+  'Water Bottle',
+  'Pack',
+  'Box',
+  'Bag',
+  'Sack',
+  'Pair',
+  'Set',
+  'Other',
+];
+
 export default function Inventory() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -45,6 +61,9 @@ export default function Inventory() {
   const [form, setForm] = useState({
     name: '',
     category: 'Food',
+    customCategory: '',
+    unit: 'Piece',
+    customUnit: '',
     buying_price: '',
     selling_price: '',
     quantity: '',
@@ -60,9 +79,19 @@ export default function Inventory() {
     setError('');
 
     try {
+      const {
+        data: { user },
+        error: userError,
+      } = await supabase.auth.getUser();
+
+      if (userError || !user) {
+        throw new Error('You must be logged in to view inventory.');
+      }
+
       const { data, error } = await supabase
         .from('products')
         .select('*')
+        .eq('user_id', user.id)
         .order('created_at', { ascending: false });
 
       if (error) {
@@ -87,6 +116,9 @@ export default function Inventory() {
     setForm({
       name: '',
       category: 'Food',
+      customCategory: '',
+      unit: 'Piece',
+      customUnit: '',
       buying_price: '',
       selling_price: '',
       quantity: '',
@@ -100,9 +132,18 @@ export default function Inventory() {
   function openEditForm(p: Product) {
     setEditingProduct(p);
 
+    const savedCategory = p.category || 'Other';
+    const savedUnit = p.unit || 'Piece';
+
+    const isStandardCategory = CATEGORIES.includes(savedCategory);
+    const isStandardUnit = UNITS.includes(savedUnit);
+
     setForm({
       name: p.name,
-      category: p.category,
+      category: isStandardCategory ? savedCategory : 'Other',
+      customCategory: isStandardCategory ? '' : savedCategory,
+      unit: isStandardUnit ? savedUnit : 'Other',
+      customUnit: isStandardUnit ? '' : savedUnit,
       buying_price: String(p.buying_price),
       selling_price: String(p.selling_price),
       quantity: String(p.quantity),
@@ -117,7 +158,6 @@ export default function Inventory() {
     setFormError('');
     setError('');
 
-    // Get logged-in user
     const {
       data: { user },
       error: userError,
@@ -135,31 +175,53 @@ export default function Inventory() {
     const quantity = parseInt(form.quantity);
     const minStock = parseInt(form.min_stock_level);
 
-    // Validate product name
+    const finalCategory =
+      form.category === 'Other'
+        ? form.customCategory.trim()
+        : form.category;
+
+    const finalUnit =
+      form.unit === 'Other'
+        ? form.customUnit.trim()
+        : form.unit;
+
     if (!form.name.trim()) {
       setFormError('Product name is required');
       return;
     }
 
-    // Validate buying price
+    if (!finalCategory) {
+      setFormError('Enter a custom category');
+      return;
+    }
+
+    if (!finalUnit) {
+      setFormError('Enter a custom unit');
+      return;
+    }
+
     if (isNaN(buyingPrice) || buyingPrice < 0) {
       setFormError('Enter a valid buying price');
       return;
     }
 
-    // Validate selling price
     if (isNaN(sellingPrice) || sellingPrice < 0) {
       setFormError('Enter a valid selling price');
       return;
     }
 
-    // Validate quantity
+    if (sellingPrice < buyingPrice) {
+      setFormError(
+        'Selling price cannot be lower than buying price'
+      );
+      return;
+    }
+
     if (isNaN(quantity) || quantity < 0) {
       setFormError('Enter a valid quantity');
       return;
     }
 
-    // Validate minimum stock
     if (isNaN(minStock) || minStock < 0) {
       setFormError('Enter a valid minimum stock level');
       return;
@@ -169,12 +231,12 @@ export default function Inventory() {
 
     try {
       if (editingProduct) {
-        // Update only the logged-in user's product
         const { error } = await supabase
           .from('products')
           .update({
             name: form.name.trim(),
-            category: form.category,
+            category: finalCategory,
+            unit: finalUnit,
             buying_price: buyingPrice,
             selling_price: sellingPrice,
             quantity,
@@ -187,17 +249,19 @@ export default function Inventory() {
           throw error;
         }
       } else {
-        // Create a new product belonging to the logged-in user
         const { error } = await supabase
           .from('products')
           .insert({
             user_id: user.id,
             name: form.name.trim(),
-            category: form.category,
+            category: finalCategory,
+            unit: finalUnit,
             buying_price: buyingPrice,
             selling_price: sellingPrice,
             quantity,
+            quantity_sold: 0,
             min_stock_level: minStock,
+            is_sample: false,
           });
 
         if (error) {
@@ -211,6 +275,9 @@ export default function Inventory() {
       setForm({
         name: '',
         category: 'Food',
+        customCategory: '',
+        unit: 'Piece',
+        customUnit: '',
         buying_price: '',
         selling_price: '',
         quantity: '',
@@ -238,7 +305,6 @@ export default function Inventory() {
       return;
     }
 
-    // Get logged-in user
     const {
       data: { user },
       error: userError,
@@ -265,10 +331,11 @@ export default function Inventory() {
 
   const filtered = products.filter(
     (p) =>
-      p.name
+      p.name.toLowerCase().includes(search.toLowerCase()) ||
+      (p.category || '')
         .toLowerCase()
         .includes(search.toLowerCase()) ||
-      p.category
+      (p.unit || '')
         .toLowerCase()
         .includes(search.toLowerCase())
   );
@@ -288,14 +355,12 @@ export default function Inventory() {
         subtitle="Manage your products and stock"
       />
 
-      {/* Search and Add Product */}
       <div className="flex flex-col sm:flex-row gap-3 mb-4">
         <div className="relative flex-1">
           <Search
             size={20}
             className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"
           />
-
           <input
             type="text"
             value={search}
@@ -314,173 +379,212 @@ export default function Inventory() {
         </Button>
       </div>
 
-      {/* Product List */}
       {filtered.length === 0 ? (
-        <Card className="p-6">
-          <EmptyState
-            message={
-              search
-                ? 'No products match your search'
-                : 'No products yet. Tap "Add Product" to start.'
-            }
-          />
-        </Card>
+        <EmptyState
+          icon={<Package size={32} />}
+          title="No products found"
+          description={
+            search
+              ? 'Try changing your search.'
+              : 'Add your first product to start managing inventory.'
+          }
+          action={
+            !search ? (
+              <Button
+                onClick={openAddForm}
+                className="flex items-center gap-2"
+              >
+                <Plus size={18} />
+                Add Product
+              </Button>
+            ) : undefined
+          }
+        />
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          {filtered.map((p) => {
-            const isLow =
-              p.quantity <= p.min_stock_level;
+        <Card className="overflow-hidden">
+          <div className="overflow-x-auto">
+            <table className="w-full">
+              <thead>
+                <tr className="border-b border-slate-200 bg-slate-50">
+                  <th className="text-left px-4 py-3 text-sm font-semibold text-slate-600">
+                    Product
+                  </th>
+                  <th className="text-left px-4 py-3 text-sm font-semibold text-slate-600">
+                    Category
+                  </th>
+                  <th className="text-left px-4 py-3 text-sm font-semibold text-slate-600">
+                    Unit
+                  </th>
+                  <th className="text-left px-4 py-3 text-sm font-semibold text-slate-600">
+                    Buying Price
+                  </th>
+                  <th className="text-left px-4 py-3 text-sm font-semibold text-slate-600">
+                    Selling Price
+                  </th>
+                  <th className="text-left px-4 py-3 text-sm font-semibold text-slate-600">
+                    Stock
+                  </th>
+                  <th className="text-right px-4 py-3 text-sm font-semibold text-slate-600">
+                    Actions
+                  </th>
+                </tr>
+              </thead>
 
-            return (
-              <Card key={p.id} className="p-5">
-                <div className="flex items-start justify-between gap-3">
-                  <div className="flex items-start gap-3 min-w-0">
-                    <div
-                      className={`w-11 h-11 rounded-lg flex items-center justify-center flex-shrink-0 ${
-                        isLow
-                          ? 'bg-amber-100'
-                          : 'bg-emerald-100'
-                      }`}
+              <tbody>
+                {filtered.map((p) => {
+                  const isLowStock =
+                    p.quantity <= p.min_stock_level;
+
+                  return (
+                    <tr
+                      key={p.id}
+                      className="border-b border-slate-100 last:border-0 hover:bg-slate-50"
                     >
-                      <Package
-                        size={20}
-                        className={
-                          isLow
-                            ? 'text-amber-600'
-                            : 'text-emerald-600'
-                        }
-                      />
-                    </div>
+                      <td className="px-4 py-4">
+                        <div className="flex items-center gap-3">
+                          <div className="w-10 h-10 rounded-xl bg-emerald-100 flex items-center justify-center">
+                            <Package
+                              size={20}
+                              className="text-emerald-600"
+                            />
+                          </div>
 
-                    <div className="min-w-0">
-                      <h3 className="font-bold text-slate-800 truncate">
-                        {p.name}
-                      </h3>
+                          <div>
+                            <p className="font-medium text-slate-800">
+                              {p.name}
+                            </p>
 
-                      <p className="text-sm text-slate-500">
-                        {p.category}
-                      </p>
-                    </div>
-                  </div>
+                            {p.description && (
+                              <p className="text-xs text-slate-500">
+                                {p.description}
+                              </p>
+                            )}
+                          </div>
+                        </div>
+                      </td>
 
-                  {p.is_sample && (
-                    <Badge color="blue">
-                      Demo
-                    </Badge>
-                  )}
-                </div>
+                      <td className="px-4 py-4">
+                        <Badge variant="default">
+                          {p.category || 'Other'}
+                        </Badge>
+                      </td>
 
-                {/* Product information */}
-                <div className="grid grid-cols-2 gap-2 mt-4 text-sm">
-                  <div>
-                    <p className="text-slate-400">
-                      Buying Price
-                    </p>
-                    <p className="font-semibold text-slate-700">
-                      {formatUGX(p.buying_price)}
-                    </p>
-                  </div>
+                      <td className="px-4 py-4">
+                        <span className="text-sm text-slate-700">
+                          {p.unit || 'Piece'}
+                        </span>
+                      </td>
 
-                  <div>
-                    <p className="text-slate-400">
-                      Selling Price
-                    </p>
-                    <p className="font-semibold text-slate-700">
-                      {formatUGX(p.selling_price)}
-                    </p>
-                  </div>
+                      <td className="px-4 py-4">
+                        <span className="text-sm text-slate-700">
+                          {formatUGX(p.buying_price)}
+                          <span className="text-xs text-slate-400">
+                            {' '}
+                            / {p.unit || 'Piece'}
+                          </span>
+                        </span>
+                      </td>
 
-                  <div>
-                    <p className="text-slate-400">
-                      In Stock
-                    </p>
-                    <p
-                      className={`font-semibold ${
-                        isLow
-                          ? 'text-amber-600'
-                          : 'text-slate-700'
-                      }`}
-                    >
-                      {p.quantity}
-                    </p>
-                  </div>
+                      <td className="px-4 py-4">
+                        <span className="text-sm font-medium text-slate-800">
+                          {formatUGX(p.selling_price)}
+                          <span className="text-xs text-slate-400">
+                            {' '}
+                            / {p.unit || 'Piece'}
+                          </span>
+                        </span>
+                      </td>
 
-                  <div>
-                    <p className="text-slate-400">
-                      Min. Level
-                    </p>
-                    <p className="font-semibold text-slate-700">
-                      {p.min_stock_level}
-                    </p>
-                  </div>
-                </div>
+                      <td className="px-4 py-4">
+                        <div className="flex items-center gap-2">
+                          {isLowStock && (
+                            <AlertTriangle
+                              size={17}
+                              className="text-amber-500"
+                            />
+                          )}
 
-                {/* Low stock warning */}
-                {isLow && (
-                  <div className="flex items-center gap-2 mt-3 px-3 py-2 rounded-lg bg-amber-50">
-                    <AlertTriangle
-                      size={16}
-                      className="text-amber-600"
-                    />
+                          <div>
+                            <p
+                              className={`text-sm font-medium ${
+                                isLowStock
+                                  ? 'text-amber-600'
+                                  : 'text-slate-800'
+                              }`}
+                            >
+                              {p.quantity} {p.unit || 'Piece'}
+                            </p>
 
-                    <span className="text-sm text-amber-700 font-medium">
-                      Low stock — restock soon
-                    </span>
-                  </div>
-                )}
+                            <p className="text-xs text-slate-400">
+                              Min: {p.min_stock_level}{' '}
+                              {p.unit || 'Piece'}
+                            </p>
+                          </div>
+                        </div>
+                      </td>
 
-                {/* Actions */}
-                <div className="flex gap-2 mt-4">
-                  <Button
-                    variant="outline"
-                    onClick={() => openEditForm(p)}
-                    className="flex-1 flex items-center justify-center gap-2"
-                  >
-                    <Pencil size={16} />
-                    Edit
-                  </Button>
+                      <td className="px-4 py-4">
+                        <div className="flex items-center justify-end gap-2">
+                          <button
+                            type="button"
+                            onClick={() => openEditForm(p)}
+                            className="p-2 rounded-lg text-slate-500 hover:bg-slate-100 hover:text-slate-800"
+                            title="Edit product"
+                          >
+                            <Pencil size={17} />
+                          </button>
 
-                  <Button
-                    variant="danger"
-                    onClick={() => deleteProduct(p)}
-                    className="flex items-center justify-center px-4"
-                  >
-                    <Trash2 size={16} />
-                  </Button>
-                </div>
-              </Card>
-            );
-          })}
-        </div>
+                          <button
+                            type="button"
+                            onClick={() => deleteProduct(p)}
+                            className="p-2 rounded-lg text-slate-500 hover:bg-red-50 hover:text-red-600"
+                            title="Delete product"
+                          >
+                            <Trash2 size={17} />
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        </Card>
       )}
 
-      {/* Add/Edit Product Modal */}
       {showForm && (
-        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/40 p-0 sm:p-4">
-          <Card className="w-full sm:max-w-lg p-6 max-h-[90vh] overflow-y-auto rounded-t-2xl sm:rounded-2xl">
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="text-xl font-bold text-slate-800">
-                {editingProduct
-                  ? 'Edit Product'
-                  : 'Add Product'}
-              </h3>
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 p-4">
+          <div className="w-full max-w-2xl max-h-[90vh] overflow-y-auto rounded-2xl bg-white shadow-2xl">
+            <div className="flex items-center justify-between px-6 py-5 border-b border-slate-200">
+              <div>
+                <h2 className="text-xl font-semibold text-slate-800">
+                  {editingProduct
+                    ? 'Edit Product'
+                    : 'Add Product'}
+                </h2>
+
+                <p className="text-sm text-slate-500 mt-1">
+                  Enter the product and stock details below.
+                </p>
+              </div>
 
               <button
+                type="button"
                 onClick={() => setShowForm(false)}
-                className="p-2 rounded-lg text-slate-400 hover:bg-slate-100"
+                className="p-2 rounded-lg text-slate-400 hover:bg-slate-100 hover:text-slate-700"
               >
                 <X size={20} />
               </button>
             </div>
 
-            {/* Form error */}
-            {formError && (
-              <div className="mb-4 px-4 py-3 rounded-xl bg-rose-50 text-rose-700 text-sm font-medium">
-                {formError}
-              </div>
-            )}
+            <div className="p-6 space-y-5">
+              {formError && (
+                <div className="rounded-xl bg-red-50 border border-red-200 px-4 py-3 text-sm text-red-700">
+                  {formError}
+                </div>
+              )}
 
-            <div className="space-y-4">
               <Input
                 label="Product Name"
                 value={form.name}
@@ -490,8 +594,7 @@ export default function Inventory() {
                     name: v,
                   })
                 }
-                placeholder="e.g. Sugar (1kg)"
-                required
+                placeholder="e.g. Cassava Flour"
               />
 
               <Select
@@ -503,15 +606,62 @@ export default function Inventory() {
                     category: v,
                   })
                 }
-                options={CATEGORIES.map((c) => ({
-                  value: c,
-                  label: c,
-                }))}
+                options={CATEGORIES.map(
+                  (c) => ({
+                    value: c,
+                    label: c,
+                  })
+                )}
               />
 
-              <div className="grid grid-cols-2 gap-3">
+              {form.category === 'Other' && (
                 <Input
-                  label="Buying Price (Ugx)"
+                  label="Custom Category"
+                  value={form.customCategory}
+                  onChange={(v) =>
+                    setForm({
+                      ...form,
+                      customCategory: v,
+                    })
+                  }
+                  placeholder="Enter your category"
+                />
+              )}
+
+              <Select
+                label="Unit"
+                value={form.unit}
+                onChange={(v) =>
+                  setForm({
+                    ...form,
+                    unit: v,
+                  })
+                }
+                options={UNITS.map(
+                  (u) => ({
+                    value: u,
+                    label: u,
+                  })
+                )}
+              />
+
+              {form.unit === 'Other' && (
+                <Input
+                  label="Custom Unit"
+                  value={form.customUnit}
+                  onChange={(v) =>
+                    setForm({
+                      ...form,
+                      customUnit: v,
+                    })
+                  }
+                  placeholder="e.g. Tray, Crate, Bundle"
+                />
+              )}
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <Input
+                  label="Buying Price"
                   type="number"
                   value={form.buying_price}
                   onChange={(v) =>
@@ -521,12 +671,10 @@ export default function Inventory() {
                     })
                   }
                   placeholder="0"
-                  min="0"
-                  required
                 />
 
                 <Input
-                  label="Selling Price (Ugx)"
+                  label="Selling Price"
                   type="number"
                   value={form.selling_price}
                   onChange={(v) =>
@@ -536,14 +684,12 @@ export default function Inventory() {
                     })
                   }
                   placeholder="0"
-                  min="0"
-                  required
                 />
               </div>
 
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <Input
-                  label="Quantity in Stock"
+                  label="Quantity"
                   type="number"
                   value={form.quantity}
                   onChange={(v) =>
@@ -553,8 +699,6 @@ export default function Inventory() {
                     })
                   }
                   placeholder="0"
-                  min="0"
-                  required
                 />
 
                 <Input
@@ -567,19 +711,16 @@ export default function Inventory() {
                       min_stock_level: v,
                     })
                   }
-                  placeholder="5"
-                  min="0"
-                  required
+                  placeholder="0"
                 />
               </div>
             </div>
 
-            {/* Modal buttons */}
-            <div className="flex gap-3 mt-6">
+            <div className="flex items-center justify-end gap-3 px-6 py-5 border-t border-slate-200 bg-slate-50">
               <Button
                 variant="secondary"
                 onClick={() => setShowForm(false)}
-                className="flex-1"
+                disabled={saving}
               >
                 Cancel
               </Button>
@@ -587,16 +728,16 @@ export default function Inventory() {
               <Button
                 onClick={saveProduct}
                 disabled={saving}
-                className="flex-1"
+                className="flex items-center gap-2"
               >
                 {saving
                   ? 'Saving...'
                   : editingProduct
-                    ? 'Update'
-                    : 'Add Product'}
+                    ? 'Update Product'
+                    : 'Save Product'}
               </Button>
             </div>
-          </Card>
+          </div>
         </div>
       )}
     </div>
