@@ -409,21 +409,31 @@ export default function Inventory() {
                   <th className="text-left px-4 py-3 text-sm font-semibold text-slate-600">
                     Product
                   </th>
+
                   <th className="text-left px-4 py-3 text-sm font-semibold text-slate-600">
                     Category
                   </th>
+
                   <th className="text-left px-4 py-3 text-sm font-semibold text-slate-600">
                     Unit
                   </th>
+
                   <th className="text-left px-4 py-3 text-sm font-semibold text-slate-600">
                     Buying Price
                   </th>
+
                   <th className="text-left px-4 py-3 text-sm font-semibold text-slate-600">
                     Selling Price
                   </th>
+
+                  <th className="text-left px-4 py-3 text-sm font-semibold text-slate-600">
+                    Profit Made
+                  </th>
+
                   <th className="text-left px-4 py-3 text-sm font-semibold text-slate-600">
                     Stock
                   </th>
+
                   <th className="text-right px-4 py-3 text-sm font-semibold text-slate-600">
                     Actions
                   </th>
@@ -434,6 +444,16 @@ export default function Inventory() {
                 {filtered.map((p) => {
                   const isLowStock =
                     p.quantity <= p.min_stock_level;
+
+                  const quantitySold =
+                    Number(p.quantity_sold || 0);
+
+                  const profitPerUnit =
+                    Number(p.selling_price || 0) -
+                    Number(p.buying_price || 0);
+
+                  const profitMade =
+                    profitPerUnit * quantitySold;
 
                   return (
                     <tr
@@ -493,6 +513,19 @@ export default function Inventory() {
                             / {p.unit || 'Piece'}
                           </span>
                         </span>
+                      </td>
+
+                      <td className="px-4 py-4">
+                        <div>
+                          <p className="text-sm font-semibold text-emerald-600">
+                            {formatUGX(profitMade)}
+                          </p>
+
+                          <p className="text-xs text-slate-400">
+                            {quantitySold.toLocaleString()}{' '}
+                            {p.unit || 'Piece'} sold
+                          </p>
+                        </div>
                       </td>
 
                       <td className="px-4 py-4">

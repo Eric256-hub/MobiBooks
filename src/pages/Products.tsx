@@ -21,6 +21,7 @@ import {
 
 type ProductWithUnit = Product & {
   unit?: string | null;
+  quantity_sold?: number | null;
 };
 
 type ProductForm = {
@@ -709,6 +710,31 @@ export default function Products() {
     0
   );
 
+  const totalProfitMade = products.reduce(
+    (total, product) => {
+      const buyingPrice = Number(
+        product.buying_price || 0
+      );
+
+      const sellingPrice = Number(
+        product.selling_price || 0
+      );
+
+      const quantitySold = Number(
+        product.quantity_sold || 0
+      );
+
+      const profitPerUnit =
+        sellingPrice - buyingPrice;
+
+      return (
+        total +
+        profitPerUnit * quantitySold
+      );
+    },
+    0
+  );
+
   const availableUnits = getUnitsForCategory(
     form.category
   );
@@ -741,7 +767,7 @@ export default function Products() {
       )}
 
       {/* SUMMARY CARDS */}
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-5">
         <Card>
           <div className="flex items-center gap-4">
             <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-indigo-50 text-indigo-600">
@@ -798,6 +824,18 @@ export default function Products() {
 
             <p className="mt-1 text-xl font-bold text-gray-900">
               {formatUGX(totalStockValue)}
+            </p>
+          </div>
+        </Card>
+
+        <Card>
+          <div>
+            <p className="text-sm text-gray-500">
+              Profit Made
+            </p>
+
+            <p className="mt-1 text-xl font-bold text-emerald-600">
+              {formatUGX(totalProfitMade)}
             </p>
           </div>
         </Card>
@@ -882,6 +920,10 @@ export default function Products() {
                   </th>
 
                   <th className="px-6 py-4 text-left text-xs font-semibold uppercase tracking-wider text-gray-500">
+                    Profit Made
+                  </th>
+
+                  <th className="px-6 py-4 text-left text-xs font-semibold uppercase tracking-wider text-gray-500">
                     Stock
                   </th>
 
@@ -900,6 +942,22 @@ export default function Products() {
                   const minimum = Number(
                     product.min_stock_level || 0
                   );
+
+                  const buyingPrice = Number(
+                    product.buying_price || 0
+                  );
+
+                  const sellingPrice = Number(
+                    product.selling_price || 0
+                  );
+
+                  const quantitySold = Number(
+                    product.quantity_sold || 0
+                  );
+
+                  const profitMade =
+                    (sellingPrice - buyingPrice) *
+                    quantitySold;
 
                   const isLowStock =
                     quantity <= minimum;
@@ -941,14 +999,29 @@ export default function Products() {
 
                       <td className="whitespace-nowrap px-6 py-4 text-sm font-medium text-gray-700">
                         {formatUGX(
-                          Number(product.buying_price || 0)
+                          buyingPrice
                         )}
                       </td>
 
                       <td className="whitespace-nowrap px-6 py-4 text-sm font-semibold text-gray-900">
                         {formatUGX(
-                          Number(product.selling_price || 0)
+                          sellingPrice
                         )}
+                      </td>
+
+                      <td className="whitespace-nowrap px-6 py-4">
+                        <div>
+                          <p className="text-sm font-bold text-emerald-600">
+                            {formatUGX(
+                              profitMade
+                            )}
+                          </p>
+
+                          <p className="text-xs text-gray-400">
+                            {quantitySold.toLocaleString()}{' '}
+                            {product.unit || 'Piece'} sold
+                          </p>
+                        </div>
                       </td>
 
                       <td className="whitespace-nowrap px-6 py-4">
@@ -1270,6 +1343,42 @@ export default function Products() {
                 </div>
               </div>
 
+              {/* PRICING PREVIEW */}
+              {(form.buying_price ||
+                form.selling_price) && (
+                <div className="rounded-xl border border-emerald-100 bg-emerald-50 p-4">
+                  <div className="flex items-center justify-between gap-4">
+                    <div>
+                      <p className="text-sm font-semibold text-gray-700">
+                        Profit Per{' '}
+                        {form.unit === 'Other'
+                          ? form.customUnit ||
+                            'Unit'
+                          : form.unit}
+                      </p>
+
+                      <p className="mt-1 text-xs text-gray-500">
+                        Selling price minus buying price
+                      </p>
+                    </div>
+
+                    <p className="text-lg font-bold text-emerald-600">
+                      {formatUGX(
+                        Math.max(
+                          0,
+                          Number(
+                            form.selling_price || 0
+                          ) -
+                            Number(
+                              form.buying_price || 0
+                            )
+                        )
+                      )}
+                    </p>
+                  </div>
+                </div>
+              )}
+
               {/* STOCK */}
               <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
                 <div>
@@ -1294,8 +1403,10 @@ export default function Products() {
                   />
 
                   <p className="mt-1.5 text-xs text-gray-500">
-                    Measured in {form.unit === 'Other'
-                      ? form.customUnit || 'your custom unit'
+                    Measured in{' '}
+                    {form.unit === 'Other'
+                      ? form.customUnit ||
+                        'your custom unit'
                       : form.unit}
                   </p>
                 </div>
