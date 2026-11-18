@@ -130,7 +130,7 @@ export default function Statements({ mode }: { mode: StatementMode }) {
         const availableSaccos = (saccoData || []) as Sacco[];
         setSaccos(availableSaccos);
         const assignedSacco = (profile as { sacco_id: string | null } | null)?.sacco_id;
-        setSelectedSacco((current) => current || assignedSacco || availableSaccos[0]?.id || '');
+        setSelectedSacco(assignedSacco || '');
       }
     } catch (err) {
       console.error(err);
@@ -246,11 +246,11 @@ export default function Statements({ mode }: { mode: StatementMode }) {
             </label>
             <label className="text-sm font-medium text-slate-700 sm:col-span-2">
               SACCO
-              <select required value={selectedSacco} onChange={(event) => setSelectedSacco(event.target.value)} className="mt-2 w-full rounded-xl border border-slate-300 bg-white px-3 py-3">
-                <option value="">Select a SACCO</option>
-                {saccos.map((sacco) => <option key={sacco.id} value={sacco.id}>{sacco.name}{sacco.branch ? ` — ${sacco.branch}` : ''}</option>)}
+              <select required disabled value={selectedSacco} className="mt-2 w-full rounded-xl border border-slate-300 bg-slate-100 px-3 py-3 text-slate-700">
+                <option value="">{selectedSacco ? 'Assigned SACCO' : 'No SACCO assigned to your profile'}</option>
+                {saccos.filter((sacco) => sacco.id === selectedSacco).map((sacco) => <option key={sacco.id} value={sacco.id}>{sacco.name}{sacco.branch ? ` — ${sacco.branch}` : ''}</option>)}
               </select>
-              <span className="mt-1 block text-xs text-amber-700">Choose the SACCO associated with your business. Confirm the correct assignment with your administrator.</span>
+              <span className="mt-1 block text-xs text-amber-700">The SACCO is taken from your profile. If none is assigned, contact the administrator before requesting a statement.</span>
             </label>
             <div className="sm:col-span-2">
               <button type="submit" disabled={saving || loading || !periodFrom || !selectedSacco} className="rounded-xl bg-emerald-600 px-5 py-3 font-semibold text-white hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-50">
