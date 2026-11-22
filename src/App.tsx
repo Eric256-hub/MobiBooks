@@ -9,6 +9,10 @@ import {
   Menu,
   X,
   LogOut,
+  FileCheck2,
+  ClipboardCheck,
+  Building2,
+  ShieldCheck,
 } from 'lucide-react';
 import type { User } from '@supabase/supabase-js';
 
@@ -22,6 +26,7 @@ import Expenses from '@/pages/Expenses';
 import Inventory from '@/pages/Inventory';
 import Transactions from '@/pages/Transactions';
 import Reports from '@/pages/Reports';
+import Statements from '@/pages/Statements';
 
 export type Page =
   | 'dashboard'
@@ -30,7 +35,11 @@ export type Page =
   | 'expenses'
   | 'inventory'
   | 'transactions'
-  | 'reports';
+  | 'reports'
+  | 'vbrs'
+  | 'review'
+  | 'sacco'
+  | 'audit';
 
 export type DashboardPeriod =
   | 'today'
@@ -77,7 +86,12 @@ const navItems: {
     label: 'Reports',
     icon: BarChart3,
   },
+  { id: 'vbrs', label: 'Verified Statements', icon: FileCheck2 },
+  { id: 'review', label: 'Reviewer Dashboard', icon: ClipboardCheck },
+  { id: 'sacco', label: 'SACCO Statements', icon: Building2 },
+  { id: 'audit', label: 'Admin Audit Logs', icon: ShieldCheck },
 ];
+type AppRole = 'trader' | 'reviewer' | 'officer' | 'admin';
 
 function App() {
   const [page, setPage] = useState<Page>('dashboard');
@@ -90,6 +104,7 @@ function App() {
 
   const [user, setUser] = useState<User | null>(null);
   const [authLoading, setAuthLoading] = useState(true);
+  const [appRole, setAppRole] = useState<AppRole | null>(null);
 
   const [showLoginSplash, setShowLoginSplash] =
     useState(false);
@@ -129,6 +144,27 @@ function App() {
   useEffect(() => {
     setMobileNavOpen(false);
   }, [page]);
+
+  useEffect(() => {
+    let active = true;
+    async function loadRole() {
+      if (!user) {
+        setAppRole(null);
+        return;
+      }
+      const { data, error } = await supabase.rpc('app_role');
+      if (!active) return;
+      if (error) {
+        console.error('Unable to load account role:', error);
+        setAppRole(null);
+        return;
+      }
+      const role = data as AppRole | null;
+      setAppRole(role && ['trader', 'reviewer', 'officer', 'admin'].includes(role) ? role : null);
+    }
+    void loadRole();
+    return () => { active = false; };
+  }, [user]);
 
   async function handleLogout() {
     await supabase.auth.signOut();
@@ -245,6 +281,18 @@ function App() {
       case 'reports':
         return <Reports />;
 
+      case 'vbrs':
+        return <Statements mode="trader" />;
+
+      case 'review':
+        return <Statements mode="reviewer" />;
+
+      case 'sacco':
+        return <Statements mode="officer" />;
+
+      case 'audit':
+        return <Statements mode="admin" />;
+
       default:
         return (
           <Dashboard
@@ -319,7 +367,18 @@ function App() {
         </div>
 
         <nav className="p-3 lg:p-4 space-y-1">
-          {navItems.map((item) => {
+          {navItems
+            .filter((item) => {
+              const rolePages: Record<AppRole, Page> = {
+                trader: 'vbrs',
+                reviewer: 'review',
+                officer: 'sacco',
+                admin: 'audit',
+              };
+              const rolePage = ['vbrs', 'review', 'sacco', 'audit'].includes(item.id);
+              return !rolePage || (appRole !== null && item.id === rolePages[appRole]);
+            })
+            .map((item) => {
             const Icon = item.icon;
             const active = page === item.id;
 
